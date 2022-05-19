@@ -83,7 +83,7 @@ impl From<TransactionCsvElement> for Transaction {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Account {
     pub available: f64,
     pub held: f64,
@@ -103,7 +103,8 @@ impl Account {
     }
 }
 
-struct Ledger {
+#[derive(Default)]
+struct Ledger{
     pub state: HashMap<u16, Account>,
     pub history: HashMap<u32, TransactionBodyWithAmount>,
 }
@@ -111,17 +112,18 @@ struct Ledger {
 impl Ledger {
     pub fn process_txs(&mut self, txs: Vec<Transaction>) {
         for tx in txs {
+            //println!("{:?}", tx);
             match tx {
-                Transaction::Deposit(e) => self.process_increment(e),
-                Transaction::Withdraw(_) => todo!(),
-                Transaction::Dispute(_) => todo!(),
-                Transaction::Resolve(_) => todo!(),
-                Transaction::Chargeback(_) => todo!(),
+                Transaction::Deposit(e) => self.process_deposit(e),
+                Transaction::Withdraw(e) => self.process_withdrawal(e),
+                Transaction::Dispute(e) => self.process_dispute(e),
+                Transaction::Resolve(e) => self.process_resolve(e),
+                Transaction::Chargeback(e) => self.process_chargeback(e),
             }
         }
     }
 
-    fn process_increment<G: ClientAndId + Amount>(&mut self, tx: G) {
+    fn process_deposit<G: ClientAndId + Amount>(&mut self, tx: G) {
         if !self.state.contains_key(&tx.client_id()) {
             self.state.insert(tx.client_id(), Account::default());
         }
@@ -129,16 +131,29 @@ impl Ledger {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
 
         account.deposit(tx.amount());
+        println!("{:?}", account);
+        self.history.insert(tx.id(), tx);
+    }
 
-        //self.history.insert(tx.id(), tx);
+    fn process_withdrawal<G: ClientAndId + Amount>(&mut self, tx: G){
+        println!("withdrawal");
     }
 
     fn process_dispute(&mut self, tx: TransactionBody) {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
         let disputed_tx = self.history.get(&tx.id()).unwrap();
-
+        println!("{:?}", disputed_tx);
         account.dispute(disputed_tx.amount());
     }
+
+    fn process_resolve(&mut self, tx: TransactionBody) {
+        println!("resolve");
+    }
+
+    fn process_chargeback(&mut self, tx: TransactionBody) {
+        println!("chargeback");
+    }
+
 }
 
 fn parse_csv() -> Result<Vec<Transaction>, Box<dyn Error>> {
@@ -146,17 +161,13 @@ fn parse_csv() -> Result<Vec<Transaction>, Box<dyn Error>> {
     let mut all_transactions: Vec<Transaction> = Vec::new();
     for result in rdr.deserialize() {
         let record: TransactionCsvElement = result?;
-        //all_transactions.push(record);
         all_transactions.push(Transaction::from(record));
     }
-    //Transaction::from(all_transactions);
-    //println!("{:?}", all_transactions);
-    println!("{:?}", all_transactions);
-    Ok((all_transactions))
-
+    Ok(all_transactions)
 }
 
 fn main() {
-    parse_csv();
+    let transactions: Vec<Transaction> = parse_csv().unwrap();
+    let mut ledger = Ledger::default();
+    ledger.process_txs(transactions);
 }
-
