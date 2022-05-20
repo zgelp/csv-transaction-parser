@@ -167,9 +167,12 @@ impl Ledger {
 
     fn process_chargeback(&mut self, tx: TransactionBody) {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
-        let chargeback_tx = self.history.get(&tx.id()).unwrap();
-        if chargeback_tx.amount() <= account.held {
-            account.chargeback(chargeback_tx.amount());
+        let chargeback_tx = self.history.get(&tx.id());
+        match chargeback_tx {
+            Some(a) => if a.amount() <= account.held {
+                account.chargeback(a.amount());
+            },
+            None => ()
         }
     }
 }
@@ -188,5 +191,5 @@ fn main() {
     let transactions: Vec<Transaction> = parse_csv().unwrap();
     let mut ledger = Ledger::default();
     ledger.process_txs(transactions);
-    println!("{:?}", ledger);
+    println!("{:?}", ledger.state);
 }

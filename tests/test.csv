@@ -7,7 +7,11 @@ deposit,1,4,2.77
 withdrawal,1,5,1.555
 dispute,1,1,
 dispute,2,5,
-resolve,1,1,
 chargeback,2,5,
-chargeback,2,10,
-
+deposit,3,32,1.44
+deposit,14,222,1.42
+deposit,14,21222,5.5
+dispute,3,32,
+chargeback,3,32,
+deposit,3,44,14.44
+chargeback,3,112,
