@@ -1,7 +1,5 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize};
 use std::error::Error;
-use std::io;
-use std::process;
 use std::collections::HashMap;
 
 
@@ -170,11 +168,10 @@ impl Ledger {
     fn process_chargeback(&mut self, tx: TransactionBody) {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
         let chargeback_tx = self.history.get(&tx.id()).unwrap();
-        if chargeback_tx.amount() < account.held {
+        if chargeback_tx.amount() <= account.held {
             account.chargeback(chargeback_tx.amount());
         }
     }
-
 }
 
 fn parse_csv() -> Result<Vec<Transaction>, Box<dyn Error>> {
