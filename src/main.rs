@@ -14,10 +14,34 @@ trait Amount {
     fn amount(&self) -> f64;
 }
 
+#[derive(Debug, Deserialize)]
+struct TransactionCsvElement {
+    pub action: String,
+    pub client_id: u16,
+    pub tx_id: u32,
+    pub amount: Option<f64>
+}
+
 #[derive(Debug)]
 struct TransactionBody {
     id: u32,
     client_id: u16,
+}
+
+#[derive(Debug)]
+struct TransactionBodyWithAmount {
+    id: u32,
+    client_id: u16,
+    amount: f64,
+}
+
+#[derive(Debug)]
+enum Transaction {
+    Deposit(TransactionBodyWithAmount),
+    Withdraw(TransactionBodyWithAmount),
+    Dispute(TransactionBody),
+    Resolve(TransactionBody),
+    Chargeback(TransactionBody),
 }
 
 impl ClientAndId for TransactionBody {
@@ -44,30 +68,6 @@ impl Amount for TransactionBodyWithAmount {
     fn amount(&self) -> f64 {
         self.amount
     }
-}
-
-#[derive(Debug)]
-struct TransactionBodyWithAmount {
-    id: u32,
-    client_id: u16,
-    amount: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct TransactionCsvElement {
-    pub action: String,
-    pub client_id: u16,
-    pub tx_id: u32,
-    pub amount: Option<f64>
-}
-
-#[derive(Debug)]
-enum Transaction {
-    Deposit(TransactionBodyWithAmount),
-    Withdraw(TransactionBodyWithAmount),
-    Dispute(TransactionBody),
-    Resolve(TransactionBody),
-    Chargeback(TransactionBody),
 }
 
 impl From<TransactionCsvElement> for Transaction {
@@ -97,13 +97,28 @@ impl Account {
         self.total += amount;
     }
 
+    pub fn withdrawal(&mut self, amount: f64) {
+        self.available -= amount;
+    }
+
     pub fn dispute(&mut self, amount: f64) {
         self.available -= amount;
         self.held += amount;
     }
+
+    pub fn resolve_dispute(&mut self, amount: f64) {
+        self.available += amount;
+        self.held -= amount;
+    }
+
+    pub fn chargeback(&mut self, amount: f64){
+        self.held -= amount;
+        self.total -= amount;
+        self.locked = true
+    }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Ledger{
     pub state: HashMap<u16, Account>,
     pub history: HashMap<u32, TransactionBodyWithAmount>,
@@ -112,7 +127,6 @@ struct Ledger{
 impl Ledger {
     pub fn process_txs(&mut self, txs: Vec<Transaction>) {
         for tx in txs {
-            //println!("{:?}", tx);
             match tx {
                 Transaction::Deposit(e) => self.process_deposit(e),
                 Transaction::Withdraw(e) => self.process_withdrawal(e),
@@ -123,7 +137,7 @@ impl Ledger {
         }
     }
 
-    fn process_deposit<G: ClientAndId + Amount>(&mut self, tx: G) {
+    fn process_deposit(&mut self, tx: TransactionBodyWithAmount) {
         if !self.state.contains_key(&tx.client_id()) {
             self.state.insert(tx.client_id(), Account::default());
         }
@@ -131,27 +145,34 @@ impl Ledger {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
 
         account.deposit(tx.amount());
-        println!("{:?}", account);
         self.history.insert(tx.id(), tx);
     }
 
-    fn process_withdrawal<G: ClientAndId + Amount>(&mut self, tx: G){
-        println!("withdrawal");
+    fn process_withdrawal(&mut self, tx: TransactionBodyWithAmount){
+        let account = self.state.get_mut(&tx.client_id()).unwrap();
+        if account.available > tx.amount() {
+            account.withdrawal(tx.amount());
+        }
     }
 
     fn process_dispute(&mut self, tx: TransactionBody) {
         let account = self.state.get_mut(&tx.client_id()).unwrap();
         let disputed_tx = self.history.get(&tx.id()).unwrap();
-        println!("{:?}", disputed_tx);
         account.dispute(disputed_tx.amount());
     }
 
     fn process_resolve(&mut self, tx: TransactionBody) {
-        println!("resolve");
+        let account = self.state.get_mut(&tx.client_id()).unwrap();
+        let resolved_tx = self.history.get(&tx.id()).unwrap();
+        account.resolve_dispute(resolved_tx.amount());
     }
 
     fn process_chargeback(&mut self, tx: TransactionBody) {
-        println!("chargeback");
+        let account = self.state.get_mut(&tx.client_id()).unwrap();
+        let chargeback_tx = self.history.get(&tx.id()).unwrap();
+        if chargeback_tx.amount() < account.held {
+            account.chargeback(chargeback_tx.amount());
+        }
     }
 
 }
@@ -170,4 +191,5 @@ fn main() {
     let transactions: Vec<Transaction> = parse_csv().unwrap();
     let mut ledger = Ledger::default();
     ledger.process_txs(transactions);
+    println!("{:?}", ledger);
 }
