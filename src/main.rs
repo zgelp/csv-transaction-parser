@@ -14,7 +14,7 @@ trait Amount {
 
 #[derive(Debug, Deserialize)]
 struct TransactionCsvElement {
-    pub action: String,
+    pub r#type: String,
     pub client_id: u16,
     pub tx_id: u32,
     pub amount: Option<f64>
@@ -70,7 +70,7 @@ impl Amount for TransactionBodyWithAmount {
 
 impl From<TransactionCsvElement> for Transaction {
     fn from(tx: TransactionCsvElement) -> Transaction {
-        match tx.action.as_str() {
+        match tx.r#type.as_str() {
             "deposit"  => Transaction::Deposit(TransactionBodyWithAmount { id: tx.tx_id, client_id: tx.client_id, amount: tx.amount.unwrap() }),
             "withdrawal" => Transaction::Withdraw(TransactionBodyWithAmount { id: tx.tx_id, client_id: tx.client_id, amount: tx.amount.unwrap() }),
             "dispute" => Transaction::Dispute(TransactionBody{ id: tx.tx_id, client_id: tx.client_id }),
@@ -97,6 +97,7 @@ impl Account {
 
     pub fn withdrawal(&mut self, amount: f64) {
         self.available -= amount;
+        self.total -= amount;
     }
 
     pub fn dispute(&mut self, amount: f64) {
@@ -141,38 +142,53 @@ impl Ledger {
         }
 
         let account = self.state.get_mut(&tx.client_id()).unwrap();
-
         account.deposit(tx.amount());
         self.history.insert(tx.id(), tx);
     }
 
     fn process_withdrawal(&mut self, tx: TransactionBodyWithAmount){
-        let account = self.state.get_mut(&tx.client_id()).unwrap();
-        if account.available > tx.amount() {
-            account.withdrawal(tx.amount());
+        if self.state.contains_key(&tx.client_id()) {
+            let account = self.state.get_mut(&tx.client_id()).unwrap();
+
+            if account.available >= tx.amount() {
+                account.withdrawal(tx.amount());
+            }
         }
     }
 
     fn process_dispute(&mut self, tx: TransactionBody) {
-        let account = self.state.get_mut(&tx.client_id()).unwrap();
-        let disputed_tx = self.history.get(&tx.id()).unwrap();
-        account.dispute(disputed_tx.amount());
+        if self.state.contains_key(&tx.client_id()) {
+            let account = self.state.get_mut(&tx.client_id()).unwrap();
+            let disputed_tx = self.history.get(&tx.id());
+            match disputed_tx {
+                Some(a) => account.dispute(a.amount()),
+                None => ()
+            }
+        }
     }
 
     fn process_resolve(&mut self, tx: TransactionBody) {
-        let account = self.state.get_mut(&tx.client_id()).unwrap();
-        let resolved_tx = self.history.get(&tx.id()).unwrap();
-        account.resolve_dispute(resolved_tx.amount());
+        if self.state.contains_key(&tx.client_id()) {
+            let account = self.state.get_mut(&tx.client_id()).unwrap();
+            let resolved_tx = self.history.get(&tx.id());
+            match resolved_tx {
+                Some(a) => account.resolve_dispute(a.amount()),
+                None => ()
+            }
+
+        }
     }
 
     fn process_chargeback(&mut self, tx: TransactionBody) {
-        let account = self.state.get_mut(&tx.client_id()).unwrap();
-        let chargeback_tx = self.history.get(&tx.id());
-        match chargeback_tx {
-            Some(a) => if a.amount() <= account.held {
-                account.chargeback(a.amount());
-            },
-            None => ()
+        if self.state.contains_key(&tx.client_id()) {
+            let account = self.state.get_mut(&tx.client_id()).unwrap();
+            let chargeback_tx = self.history.get(&tx.id());
+            match chargeback_tx {
+                Some(a) => if a.amount() <= account.held {
+                    account.chargeback(a.amount());
+                },
+                None => ()
+            }
         }
     }
 }
