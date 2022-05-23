@@ -1,6 +1,6 @@
-type,client_id,tx_id,amount
+type,client,tx,amount
 deposit,1,1,11.2212
-deposit,2,2,2.33332
+deposit,2,2,2.3333
 deposit,2,5,2.3333
 deposit,1,3,2.77
 deposit,1,4,2.77

@@ -2,7 +2,7 @@ use serde::{Deserialize};
 use std::error::Error;
 use std::collections::HashMap;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self};
 
 trait ClientAndId {
     fn id(&self) -> u32;
@@ -98,7 +98,7 @@ impl Account {
 
     pub fn withdrawal(&mut self, amount: f64) {
         self.available -= amount;
-        self.total -= amount;
+        self.total-= amount;
     }
 
     pub fn dispute(&mut self, amount: f64) {
@@ -204,17 +204,25 @@ fn parse_csv(csv_name: &str) -> Result<Vec<Transaction>, Box<dyn Error>> {
     Ok(all_transactions)
 }
 
+fn write_to_stdout(ledger: HashMap<u16, Account>) -> Result<(), Box<dyn Error>> {
+    let mut writer = csv::Writer::from_writer(io::stdout());
+    writer.write_record(&["client","available","held","total","locked"])?;
+
+    for (key, value) in ledger.iter() {
+        writer.write_record(&[&key.to_string(), &value.available.to_string(),
+            &value.held.to_string(), &value.total.to_string(), &value.locked.to_string()
+        ]);
+    }
+    writer.flush()?;
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let filename: &String = &args[1];
     let transactions: Vec<Transaction> = parse_csv(filename).unwrap();
     let mut ledger = Ledger::default();
     ledger.process_txs(transactions);
-    //format!("client,available,held,total,locked");
-    //format!("bonker,2,2,2,tuer");
-    //io::stdout().write_all(b"client,available,held,total,locked");
-    //io::stdout().write_all(b"\nlolek,3,3,2.3,true");
-    for (key,value) in ledger.state.iter() {
-        writeln!("{},{},{},{},{}", key.to_string(), value.available, value.held, value.total, value.locked);
-    }
+    let processed_tr = ledger.state;
+    write_to_stdout(processed_tr);
 }
