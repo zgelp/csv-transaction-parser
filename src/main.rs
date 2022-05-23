@@ -3,6 +3,9 @@ use std::error::Error;
 use std::collections::HashMap;
 use std::env;
 use std::io::{self};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
+use csv::{Trim};
 
 trait ClientAndId {
     fn id(&self) -> u32;
@@ -195,8 +198,10 @@ impl Ledger {
 }
 
 fn parse_csv(csv_name: &str) -> Result<Vec<Transaction>, Box<dyn Error>> {
-    let mut rdr = csv::Reader::from_path(&csv_name)?;
+
+    let mut rdr = csv::ReaderBuilder::new().trim(Trim::All).from_path(&csv_name)?;
     let mut all_transactions: Vec<Transaction> = Vec::new();
+
     for result in rdr.deserialize() {
         let record: TransactionCsvElement = result?;
         all_transactions.push(Transaction::from(record));
@@ -209,9 +214,14 @@ fn write_to_stdout(ledger: HashMap<u16, Account>) -> Result<(), Box<dyn Error>> 
     writer.write_record(&["client","available","held","total","locked"])?;
 
     for (key, value) in ledger.iter() {
-        writer.write_record(&[&key.to_string(), &value.available.to_string(),
-            &value.held.to_string(), &value.total.to_string(), &value.locked.to_string()
-        ]);
+        let available = Decimal::from_str(&value.available.to_string()).unwrap().round_dp(4).to_string();
+        let held = Decimal::from_str(&value.held.to_string()).unwrap().round_dp(4).to_string();
+        let total = Decimal::from_str(&value.total.to_string()).unwrap().round_dp(4).to_string();
+
+        match writer.write_record(&[&key.to_string(), &available, &held, &total, &value.locked.to_string()]) {
+            Err(e) => println!("{:?}",e),
+            _ => ()
+        }
     }
     writer.flush()?;
     Ok(())
@@ -224,5 +234,8 @@ fn main() {
     let mut ledger = Ledger::default();
     ledger.process_txs(transactions);
     let processed_tr = ledger.state;
-    write_to_stdout(processed_tr);
+    match write_to_stdout(processed_tr) {
+        Err(e) => println!("{:?}",e),
+        _ => ()
+    }
 }
