@@ -6,4 +6,4 @@ Build:
 ```cargo build```
 
 Run:
-```cargo run -- <transactions.csv> > <accounts.csv>```
+```cargo run -- transactions.csv > accounts.csv```
