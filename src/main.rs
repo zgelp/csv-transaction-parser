@@ -1,7 +1,8 @@
 use serde::{Deserialize};
 use std::error::Error;
 use std::collections::HashMap;
-
+use std::env;
+use std::io::{self, Write};
 
 trait ClientAndId {
     fn id(&self) -> u32;
@@ -15,8 +16,8 @@ trait Amount {
 #[derive(Debug, Deserialize)]
 struct TransactionCsvElement {
     pub r#type: String,
-    pub client_id: u16,
-    pub tx_id: u32,
+    pub client: u16,
+    pub tx: u32,
     pub amount: Option<f64>
 }
 
@@ -71,11 +72,11 @@ impl Amount for TransactionBodyWithAmount {
 impl From<TransactionCsvElement> for Transaction {
     fn from(tx: TransactionCsvElement) -> Transaction {
         match tx.r#type.as_str() {
-            "deposit"  => Transaction::Deposit(TransactionBodyWithAmount { id: tx.tx_id, client_id: tx.client_id, amount: tx.amount.unwrap() }),
-            "withdrawal" => Transaction::Withdraw(TransactionBodyWithAmount { id: tx.tx_id, client_id: tx.client_id, amount: tx.amount.unwrap() }),
-            "dispute" => Transaction::Dispute(TransactionBody{ id: tx.tx_id, client_id: tx.client_id }),
-            "resolve" => Transaction::Resolve(TransactionBody{ id: tx.tx_id, client_id: tx.client_id }),
-            "chargeback" => Transaction::Chargeback(TransactionBody{ id: tx.tx_id, client_id: tx.client_id }) ,
+            "deposit"  => Transaction::Deposit(TransactionBodyWithAmount { id: tx.tx, client_id: tx.client, amount: tx.amount.unwrap() }),
+            "withdrawal" => Transaction::Withdraw(TransactionBodyWithAmount { id: tx.tx, client_id: tx.client, amount: tx.amount.unwrap() }),
+            "dispute" => Transaction::Dispute(TransactionBody{ id: tx.tx, client_id: tx.client }),
+            "resolve" => Transaction::Resolve(TransactionBody{ id: tx.tx, client_id: tx.client }),
+            "chargeback" => Transaction::Chargeback(TransactionBody{ id: tx.tx, client_id: tx.client }) ,
             _ => panic!("can't parse transaction"),
         }
     }
@@ -193,8 +194,8 @@ impl Ledger {
     }
 }
 
-fn parse_csv() -> Result<Vec<Transaction>, Box<dyn Error>> {
-    let mut rdr = csv::Reader::from_path("tests/test.csv")?;
+fn parse_csv(csv_name: &str) -> Result<Vec<Transaction>, Box<dyn Error>> {
+    let mut rdr = csv::Reader::from_path(&csv_name)?;
     let mut all_transactions: Vec<Transaction> = Vec::new();
     for result in rdr.deserialize() {
         let record: TransactionCsvElement = result?;
@@ -204,8 +205,16 @@ fn parse_csv() -> Result<Vec<Transaction>, Box<dyn Error>> {
 }
 
 fn main() {
-    let transactions: Vec<Transaction> = parse_csv().unwrap();
+    let args: Vec<String> = env::args().collect();
+    let filename: &String = &args[1];
+    let transactions: Vec<Transaction> = parse_csv(filename).unwrap();
     let mut ledger = Ledger::default();
     ledger.process_txs(transactions);
-    println!("{:?}", ledger.state);
+    //format!("client,available,held,total,locked");
+    //format!("bonker,2,2,2,tuer");
+    //io::stdout().write_all(b"client,available,held,total,locked");
+    //io::stdout().write_all(b"\nlolek,3,3,2.3,true");
+    for (key,value) in ledger.state.iter() {
+        writeln!("{},{},{},{},{}", key.to_string(), value.available, value.held, value.total, value.locked);
+    }
 }
